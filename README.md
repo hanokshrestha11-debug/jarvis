@@ -1,6 +1,6 @@
-# Desktop clap → Jarvis-style welcome
+# Levi — Personal AI Assistant
 
-Python script that listens to your default microphone and runs a **double-clap** welcome flow (Spotify, Chrome windows, ElevenLabs voice, Cursor). See constants at the top of `jarvis.py` for behavior and tuning.
+Levi is a personal desktop assistant created for its owner, **Hanuk Shrestha**. It listens to the default microphone for a double clap, then runs the configured desktop actions and speaks a welcome message. The preset greeting is: “Owner Hanuk Shrestha, your personal AI assistant Levi is ready and up for any help.”
 
 ## Setup
 
@@ -31,11 +31,9 @@ Without these, the welcome speech is skipped (other actions may still run).
 | `ELEVENLABS_OUTPUT_FORMAT` | e.g. `pcm_24000` (must match playback expectations). |
 | `ELEVENLABS_PCM_SAMPLE_RATE` | Override PCM sample rate if it differs from the format name. |
 | `JARVIS_WELCOME_CACHE_DIR` | Custom folder for cached welcome WAV (default: `.cache/jarvis_welcome/` under the project). |
+| Preset greeting | Edit `JARVIS_WELCOME_PHRASE` near the top of `jarvis.py` to change the spoken greeting. |
 | `JARVIS_INPUT_DEVICE` | Optional mic override: **integer** index or **substring** of the device name. If unset, the script uses the Windows default; when that mic is silent, it auto-picks the loudest working input. List devices: `python -c "import sounddevice as sd; print(sd.query_devices())"`. |
-| `CLAUDE_CODE_URL` | URL opened for Claude in Chrome (default: new chat). |
-| `TASARADAR_URL` | URL opened for Tasaradar in Chrome (default: `https://tasaradar.com`). `BINANCE_BTC_URL` is still read as a fallback if set. |
-| `CHROME_NEW_WINDOW_WAIT_S` | Seconds to wait for a new Chrome window on Windows (default `25`). |
-| `CHROME_WINDOW_WIDTH` / `CHROME_WINDOW_HEIGHT` | Windowed Chrome size when not fullscreen. |
+| `CLAUDE_CODE_URL` | URL opened for Claude in the system default browser (set Microsoft Edge as the Windows default; default URL: new chat). |
 
 Example `.env`:
 

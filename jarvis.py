@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Desktop clap listener: reads the default microphone and logs when two loud transients
-(a double clap) are detected within a short time window.
+Levi is Hanuk Shrestha's personal desktop assistant. It listens for a double clap
+to run the configured welcome actions.
 
 Run:
   python -m pip install -r requirements.txt
@@ -21,13 +21,7 @@ Tuning (constants below):
   FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP — if True, launch Cursor without -n (reuse / focus existing instance).
   OPEN_NEW_CURSOR_ON_DOUBLE_CLAP — if True, also launch Cursor with -n (extra new window; runs after focus launch if both).
   CURSOR_OPEN_FULLSCREEN — Windows: after focus/launch, send F11 to enter Cursor/VS Code-style fullscreen (toggle off with F11).
-  OPEN_CLAUDE_CODE_IN_CHROME — Claude in Chrome after Spotify (CLAUDE_CODE_URL).
-  OPEN_BINANCE_BTC_IN_CHROME — Binance BTC trade page in Chrome (BINANCE_BTC_URL).
-  CLAUDE_CHROME_MONITOR / BINANCE_CHROME_MONITOR — 1-based display index (Windows: sorted left-to-top).
-  CHROME_SEPARATE_SITE_PROFILES — Windows: if True, uses temp --user-data-dir per site (not your normal profile).
-    Default False so Claude/Binance use your usual Chrome profile and logins; enable only if both windows keep
-    opening on the same monitor and you accept a separate profile for automation.
-  OPEN_CHROME_FULLSCREEN — Fullscreen on the chosen monitor (Windows: new window is detected and snapped with SetWindowPos).
+  OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER — Claude in the default browser (CLAUDE_CODE_URL).
   JARVIS_WELCOME_* — TTS after the song (ElevenLabs). Configure via environment or a `.env`
     file next to this script (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, etc.).
     With JARVIS_WELCOME_CACHE_ENABLED, audio is saved under `.cache/jarvis_welcome/` (WAV) and
@@ -82,22 +76,12 @@ FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP = True
 OPEN_NEW_CURSOR_ON_DOUBLE_CLAP = False
 CURSOR_OPEN_FULLSCREEN = True
 
-# Google Chrome (fallback: default browser). URLs overridable in .env.
-OPEN_CLAUDE_CODE_IN_CHROME = True
-OPEN_BINANCE_BTC_IN_CHROME = True
-OPEN_CHROME_FULLSCREEN = True
-# False = default Chrome profile (your normal user, extensions, cookies). True = temp dirs under %TEMP% per site.
-CHROME_SEPARATE_SITE_PROFILES = False
-# Which physical screen (1 = leftmost/top-first after sorting). Windows only; ignored elsewhere.
-CLAUDE_CHROME_MONITOR = 1
-BINANCE_CHROME_MONITOR = 3
+# Claude opens in the system default browser (set Microsoft Edge as the Windows default).
+OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER = True
 
 JARVIS_WELCOME_ENABLED = True
 JARVIS_WELCOME_PHRASE = (
-    "Welcome home sir. "
-    "Congratulations on the new client for your SaaS app—make sure to follow up. "
-    "If it helps: a short, specific note while the deal is still fresh usually "
-    "anchors trust better than a polished deck sent cold a few days later."
+    "Hello Sir, your personal AI assistant Levi is ready and up for any help."
 )
 # Seconds after launching SONG_URI before speaking (gives Spotify/browser time to start).
 JARVIS_AFTER_SONG_DELAY_S = 1.0
@@ -684,75 +668,17 @@ def _open_url_in_chrome(
         log.warning("Could not open %s in Chrome: %s", label, e)
 
 
-def open_claude_in_chrome() -> None:
-    if not OPEN_CLAUDE_CODE_IN_CHROME:
+def open_claude_in_default_browser() -> None:
+    if not OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER:
         return
     url = (os.environ.get("CLAUDE_CODE_URL") or "https://claude.ai/new").strip()
-    pos: tuple[int, int] | None = None
-    size: tuple[int, int] | None = None
-    fs = OPEN_CHROME_FULLSCREEN
-    post_mon: int | None = None
-    user_data: str | None = None
-    if sys.platform == "win32":
-        post_mon = CLAUDE_CHROME_MONITOR
-        pos = _chrome_monitor_top_left(CLAUDE_CHROME_MONITOR)
-        if fs:
-            size = _chrome_monitor_pixel_size(CLAUDE_CHROME_MONITOR)
-        else:
-            size = _chrome_window_size()
-        if CHROME_SEPARATE_SITE_PROFILES:
-            user_data = _chrome_site_user_data_dir("claude")
-    elif not fs:
-        size = _chrome_window_size()
-    else:
-        size = None
-    _open_url_in_chrome(
-        url,
-        new_window=True,
-        label="Claude",
-        window_position=pos,
-        window_size=size,
-        fullscreen=fs,
-        win32_post_fullscreen_monitor=post_mon,
-        user_data_dir=user_data,
-    )
-
-
-def open_binance_btc_in_chrome() -> None:
-    if not OPEN_BINANCE_BTC_IN_CHROME:
+    if not url:
         return
-    url = (
-        os.environ.get("BINANCE_BTC_URL")
-        or "https://www.binance.com/en/trade/BTC_USDT"
-    ).strip()
-    pos: tuple[int, int] | None = None
-    size: tuple[int, int] | None = None
-    fs = OPEN_CHROME_FULLSCREEN
-    post_mon: int | None = None
-    user_data: str | None = None
-    if sys.platform == "win32":
-        post_mon = BINANCE_CHROME_MONITOR
-        pos = _chrome_monitor_top_left(BINANCE_CHROME_MONITOR)
-        if fs:
-            size = _chrome_monitor_pixel_size(BINANCE_CHROME_MONITOR)
-        else:
-            size = _chrome_window_size()
-        if CHROME_SEPARATE_SITE_PROFILES:
-            user_data = _chrome_site_user_data_dir("binance")
-    elif not fs:
-        size = _chrome_window_size()
-    else:
-        size = None
-    _open_url_in_chrome(
-        url,
-        new_window=True,
-        label="Binance BTC",
-        window_position=pos,
-        window_size=size,
-        fullscreen=fs,
-        win32_post_fullscreen_monitor=post_mon,
-        user_data_dir=user_data,
-    )
+    try:
+        if not webbrowser.open_new(url):
+            log.warning("Could not open Claude in the default browser: %s", url)
+    except (OSError, webbrowser.Error) as e:
+        log.warning("Could not open Claude in the default browser: %s", e)
 
 
 def _cursor_executable() -> str | None:
@@ -865,8 +791,7 @@ def _focus_existing_cursor_window_win32() -> bool:
 def run_double_clap_actions() -> None:
     """Run outside the mic loop so sleeps do not stall capture."""
     play_song(SONG_URI)
-    open_claude_in_chrome()
-    open_binance_btc_in_chrome()
+    open_claude_in_default_browser()
     if JARVIS_WELCOME_ENABLED and JARVIS_WELCOME_PHRASE.strip():
         delay = max(0.0, JARVIS_AFTER_SONG_DELAY_S)
         if delay:
@@ -943,24 +868,11 @@ def main() -> int:
         log.info("Double clap will also open a new Cursor window (-n).")
     if CURSOR_OPEN_FULLSCREEN and sys.platform == "win32":
         log.info("Cursor will be sent F11 for fullscreen after focus/launch.")
-    if OPEN_CLAUDE_CODE_IN_CHROME:
+    if OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER:
         cu = (os.environ.get("CLAUDE_CODE_URL") or "https://claude.ai/new").strip()
         log.info(
-            "After Spotify, open Claude in Chrome%s on monitor %d: %s",
-            " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
-            CLAUDE_CHROME_MONITOR,
+            "After Spotify, open Claude in the default browser: %s",
             cu,
-        )
-    if OPEN_BINANCE_BTC_IN_CHROME:
-        bu = (
-            os.environ.get("BINANCE_BTC_URL")
-            or "https://www.binance.com/en/trade/BTC_USDT"
-        ).strip()
-        log.info(
-            "After Spotify, open Binance BTC in Chrome%s on monitor %d: %s",
-            " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
-            BINANCE_CHROME_MONITOR,
-            bu,
         )
     if JARVIS_WELCOME_ENABLED:
         ev, em, ef, er = elevenlabs_env_config()
