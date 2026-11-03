@@ -1,6 +1,6 @@
 # Levi — Personal AI Assistant
 
-Levi is a voice assistant created for its owner, **Hanuk Shrestha**. It continuously listens through the selected microphone, transcribes speech locally, answers with a chosen AI provider, and speaks replies using the configured ElevenLabs voice. If ElevenLabs is unavailable, Levi falls back to the computer's local voice.
+Levi is a voice assistant created for its owner, **Hanuk Shrestha**. It waits for a double clap, opens the configured music track and Claude in your default browser, then listens for spoken requests. Levi transcribes speech locally, answers with a chosen AI provider, and speaks replies using the configured ElevenLabs voice. If ElevenLabs is unavailable, Levi falls back to the computer's local voice.
 
 ## Setup
 
@@ -19,6 +19,7 @@ The first run downloads the configured local Whisper speech-recognition model. L
 
 ## Voice commands
 
+- Double clap to open `SONG_URI` and Claude, then start voice interaction.
 - Ask questions naturally; speech is transcribed locally and sent to the selected brain.
 - Say **“switch to Claude,” “switch to Gemini,” “switch to ChatGPT,”** or **“switch to Ollama”** to use that provider for this session.
 - Say **“use the best model”** or **“switch to best model”** to return to automatic task-based routing.

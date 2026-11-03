@@ -19,7 +19,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import wave
 import webbrowser
@@ -768,15 +767,9 @@ def _focus_existing_cursor_window_win32() -> bool:
 
 
 def run_double_clap_actions() -> None:
-    """Run outside the mic loop so sleeps do not stall capture."""
+    """Open the configured music track and Claude after the wake-up clap."""
     play_song(SONG_URI)
     open_claude_in_default_browser()
-    if JARVIS_WELCOME_ENABLED and JARVIS_WELCOME_PHRASE.strip():
-        delay = max(0.0, JARVIS_AFTER_SONG_DELAY_S)
-        if delay:
-            time.sleep(delay)
-        threading.Thread(target=say_jarvis_welcome, daemon=True).start()
-    open_cursor_window()
 
 
 def open_cursor_window() -> None:
@@ -816,16 +809,16 @@ def open_cursor_window() -> None:
             log.warning("Cursor fullscreen: no Cursor window found to send F11.")
 
 
-def _legacy_clap_main() -> int:
+def _wait_for_double_clap() -> tuple[int, int | None]:
     blocksize = block_samples()
     noise_floor = 1e-4
     last_logged_double = 0.0
     first_clap_time: float | None = None
     spike_armed = True
-    welcome_sequence_done = False
+    double_clap_detected = False
 
     log.info(
-        "Listening (double clap: %.2f–%.2fs apart, rate=%d, block=%d ms, "
+        "Waiting for a double clap (%.2f-%.2fs apart, rate=%d, block=%d ms, "
         "spike_ratio=%.1f, cooldown=%.2fs). Ctrl+C to stop.",
         MIN_DOUBLE_GAP_S,
         MAX_DOUBLE_GAP_S,
@@ -835,34 +828,14 @@ def _legacy_clap_main() -> int:
         COOLDOWN_S,
     )
     if SONG_URI.strip():
-        log.info("Double clap opens this track: %s", SONG_URI.strip())
+        log.info("Double clap will open this track: %s", SONG_URI.strip())
     else:
-        log.info("SONG_URI is empty — set it to play one song on each double clap.")
-    if FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP:
-        log.info(
-            "Double clap will foreground an existing Cursor window (Windows API); "
-            "falls back to launching Cursor if none is running."
-        )
-    if OPEN_NEW_CURSOR_ON_DOUBLE_CLAP:
-        log.info("Double clap will also open a new Cursor window (-n).")
-    if CURSOR_OPEN_FULLSCREEN and sys.platform == "win32":
-        log.info("Cursor will be sent F11 for fullscreen after focus/launch.")
+        log.info("SONG_URI is empty — no music will open on a double clap.")
     if OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER:
         cu = (os.environ.get("CLAUDE_CODE_URL") or "https://claude.ai/new").strip()
         log.info(
-            "After Spotify, open Claude in the default browser: %s",
+            "Double clap will also open Claude in the default browser: %s",
             cu,
-        )
-    if JARVIS_WELCOME_ENABLED:
-        ev, em, ef, er = elevenlabs_env_config()
-        log.info(
-            "After song + %.2fs: %r (ElevenLabs voice=%s, model=%s, format=%s, pcm_rate=%d)",
-            JARVIS_AFTER_SONG_DELAY_S,
-            JARVIS_WELCOME_PHRASE.strip(),
-            ev or "(unset)",
-            em,
-            ef,
-            er,
         )
 
     input_idx = _choose_input_device(blocksize)
@@ -911,31 +884,31 @@ def _legacy_clap_main() -> int:
                         elif gap <= MAX_DOUBLE_GAP_S:
                             first_clap_time = None
                             last_logged_double = now
-                            if not welcome_sequence_done:
-                                welcome_sequence_done = True
-                                log.info(
-                                    "Double clap detected (gap=%.3fs, rms=%.5f, "
-                                    "noise_floor=%.5f, threshold=%.5f) — running welcome once",
-                                    gap,
-                                    level,
-                                    noise_floor,
-                                    threshold,
-                                )
-                                threading.Thread(
-                                    target=run_double_clap_actions, daemon=True
-                                ).start()
+                            log.info(
+                                "Double clap detected (gap=%.3fs, rms=%.5f, "
+                                "noise_floor=%.5f, threshold=%.5f).",
+                                gap,
+                                level,
+                                noise_floor,
+                                threshold,
+                            )
+                            double_clap_detected = True
+                            break
                         else:
                             first_clap_time = now
 
     except KeyboardInterrupt:
         log.info("Stopped.")
-        return 0
+        return (130, None)
     except sd.PortAudioError as e:
         log.error("Audio error: %s", e)
         log.error("If PortAudio fails, install/repair drivers or try another SAMPLE_RATE.")
-        return 1
+        return (1, None)
 
-    return 0
+    if not double_clap_detected:
+        return (1, None)
+    run_double_clap_actions()
+    return (0, input_idx)
 
 
 def main() -> int:
@@ -956,7 +929,13 @@ def main() -> int:
         return 1
     from levi_voice import run_voice_assistant
 
-    input_idx = _choose_input_device(block_samples())
+    status, input_idx = _wait_for_double_clap()
+    if status != 0:
+        return 0 if status == 130 else status
+    if input_idx is None:
+        log.error("Double-clap listener stopped without selecting an input device.")
+        return 1
+
     return run_voice_assistant(
         input_device=input_idx,
         welcome_enabled=JARVIS_WELCOME_ENABLED,
