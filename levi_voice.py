@@ -419,6 +419,132 @@ def _transcribe(model: Any, audio: np.ndarray) -> str:
     return " ".join(segment.text.strip() for segment in segments).strip()
 
 
+class LeviSpeaker:
+    def __init__(self) -> None:
+        import pyttsx3
+
+        self._local_voice = pyttsx3.init()
+
+    def speak(self, text: str, *, show_text: bool) -> None:
+        if show_text:
+            print(f"Levi: {text}", flush=True)
+        if self._speak_elevenlabs(text):
+            return
+        self._local_voice.say(text)
+        self._local_voice.runAndWait()
+
+    def _speak_elevenlabs(self, text: str) -> bool:
+        api_key = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+        voice_id = (os.environ.get("ELEVENLABS_VOICE_ID") or "").strip()
+        if not api_key or not voice_id:
+            missing = []
+            if not api_key:
+                missing.append("ELEVENLABS_API_KEY")
+            if not voice_id:
+                missing.append("ELEVENLABS_VOICE_ID")
+            log.warning(
+                "ElevenLabs voice is not configured (%s); using the local system voice.",
+                " and ".join(missing),
+            )
+            return False
+
+        output_format = (
+            os.environ.get("ELEVENLABS_OUTPUT_FORMAT") or "pcm_24000"
+        ).strip()
+        if not output_format.startswith("pcm_"):
+            log.warning(
+                "ElevenLabs conversational output requires a PCM format; got %r. "
+                "Using the local system voice.",
+                output_format,
+            )
+            return False
+        try:
+            sample_rate = int(output_format.split("_", maxsplit=1)[1])
+            sample_rate = int(
+                (os.environ.get("ELEVENLABS_PCM_SAMPLE_RATE") or "").strip()
+                or sample_rate
+            )
+            if sample_rate <= 0:
+                raise ValueError("sample rate must be positive")
+        except ValueError as exc:
+            log.warning(
+                "Invalid ElevenLabs PCM sample rate: %s. Using the local system voice.",
+                exc,
+            )
+            return False
+
+        try:
+            from elevenlabs.client import ElevenLabs
+            from elevenlabs.core.api_error import ApiError
+            import httpx
+        except ImportError as exc:
+            log.error(
+                "ElevenLabs dependency could not be loaded; using the local system "
+                "voice instead: %s",
+                exc,
+            )
+            return False
+        try:
+            client = ElevenLabs(api_key=api_key)
+            chunks = client.text_to_speech.convert(
+                voice_id=voice_id,
+                text=text,
+                model_id=(
+                    os.environ.get("ELEVENLABS_MODEL_ID")
+                    or "eleven_multilingual_v2"
+                ).strip(),
+                output_format=output_format,
+            )
+            raw_audio = b"".join(chunks)
+            if not raw_audio:
+                raise RuntimeError("ElevenLabs returned empty audio.")
+            if len(raw_audio) % 2:
+                raise RuntimeError("ElevenLabs returned incomplete PCM audio.")
+            audio = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32)
+            audio /= 32768.0
+            sd.play(audio, sample_rate)
+            sd.wait()
+            return True
+        except (
+            ApiError,
+            httpx.HTTPError,
+            ImportError,
+            OSError,
+            RuntimeError,
+            ValueError,
+            sd.PortAudioError,
+        ) as exc:
+            log.error(
+                "ElevenLabs speech failed; using the local system voice instead: %s",
+                exc,
+            )
+            return False
+
+
+def _response_mode_command(text: str) -> tuple[str, str] | None:
+    normalized = re.sub(r"[^a-z ]+", " ", text.lower())
+    normalized = " ".join(normalized.split())
+    prefix = r"(?:(?:hey levi|please) )?(?:(?:switch|change|set|use) )?"
+    if re.fullmatch(
+        prefix
+        + r"(?:to )?(?:hybrid(?: voice and text| text and voice)?|"
+        r"(?:both )?(?:voice and text|text and voice|voice plus text|text plus voice))"
+        + r"(?: mode| responses?| response mode)?",
+        normalized,
+    ):
+        return (
+            "hybrid",
+            "Hybrid mode is on. I will speak replies and show their text in the terminal.",
+        )
+    if re.fullmatch(
+        prefix + r"(?:to )?(?:voice|voice only|spoken|spoken only)"
+        + r"(?: mode| responses?| response mode)?",
+        normalized,
+    ):
+        return "voice", "Voice mode is on. I will speak my replies."
+    return None
+
+
 def run_voice_assistant(
     *,
     input_device: int,
@@ -430,32 +556,37 @@ def run_voice_assistant(
     except ImportError:
         log.error("Install voice dependencies with: python -m pip install -r requirements.txt")
         return 1
-    try:
-        import pyttsx3
-    except ImportError:
-        log.error("Install voice dependencies with: python -m pip install -r requirements.txt")
-        return 1
 
     model_name = (os.environ.get("WHISPER_MODEL") or "base").strip()
     try:
         whisper = WhisperModel(model_name, device="cpu", compute_type="int8")
-        speaker = pyttsx3.init()
+        speaker = LeviSpeaker()
     except (OSError, RuntimeError, ValueError) as exc:
         log.error("Could not initialize Levi's local voice services: %s", exc)
         return 1
 
     assistant = LeviAssistant()
+    response_mode = "voice"
 
     def speak(text: str) -> None:
-        print(f"Levi: {text}", flush=True)
-        speaker.say(text)
-        speaker.runAndWait()
+        speaker.speak(text, show_text=response_mode == "hybrid")
 
     print(
         "Levi is listening continuously. Say “switch to Claude/Gemini/ChatGPT/Ollama” "
-        "or “use the best model” to change brains. Press Ctrl+C to stop.",
+        "or “use the best model” to change brains. Say “switch to hybrid mode” "
+        "to hear and read replies, or “switch to voice mode” to hear speech only. "
+        "Press Ctrl+C to stop.",
         flush=True,
     )
+    if (
+        (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+        and (os.environ.get("ELEVENLABS_VOICE_ID") or "").strip()
+    ):
+        print("Levi's replies will use the configured ElevenLabs voice.", flush=True)
+    else:
+        log.warning(
+            "ElevenLabs reply voice is not configured; Levi will use the local system voice."
+        )
     if welcome_enabled and welcome_phrase.strip():
         speak(welcome_phrase.strip())
 
@@ -479,6 +610,11 @@ def run_voice_assistant(
             ):
                 speak("Goodbye, Owner.")
                 return 0
+            mode_command = _response_mode_command(text)
+            if mode_command:
+                response_mode, response = mode_command
+                speak(response)
+                continue
             try:
                 speak(assistant.respond(text))
             except ProviderError as exc:

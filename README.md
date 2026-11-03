@@ -1,6 +1,6 @@
 # Levi — Personal AI Assistant
 
-Levi is a voice assistant created for its owner, **Hanuk Shrestha**. It continuously listens through the selected microphone, transcribes speech locally, answers with a chosen AI provider, and speaks replies using the computer's local voice.
+Levi is a voice assistant created for its owner, **Hanuk Shrestha**. It continuously listens through the selected microphone, transcribes speech locally, answers with a chosen AI provider, and speaks replies using the configured ElevenLabs voice. If ElevenLabs is unavailable, Levi falls back to the computer's local voice.
 
 ## Setup
 
@@ -22,6 +22,8 @@ The first run downloads the configured local Whisper speech-recognition model. L
 - Ask questions naturally; speech is transcribed locally and sent to the selected brain.
 - Say **“switch to Claude,” “switch to Gemini,” “switch to ChatGPT,”** or **“switch to Ollama”** to use that provider for this session.
 - Say **“use the best model”** or **“switch to best model”** to return to automatic task-based routing.
+- Say **“switch to hybrid voice and text”** (or **“switch to hybrid mode”**) to have Levi speak replies and print the reply text in the terminal.
+- Say **“switch to voice mode”** to have Levi speak replies without printing their full text.
 - Say **“stop listening”** or press **Ctrl+C** to exit.
 
 Automatic routing uses a simple task category (coding, reasoning, or general question), then tries configured providers in order until one answers. This is a practical fallback policy, not a live benchmark or guarantee that one vendor is objectively best. Provider choice and conversation history last only for the current run.
@@ -40,6 +42,10 @@ Set keys and optional model overrides in `.env`:
 | `GEMINI_MODEL` | Gemini model (default: `gemini-3.8-flash`). |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://127.0.0.1:11434`). |
 | `OLLAMA_MODEL` | Installed Ollama model (default: `llama3.2`). |
+| `ELEVENLABS_API_KEY` | Optional ElevenLabs key for spoken replies in Levi's configured voice. |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs voice to use for replies; without both ElevenLabs settings, Levi falls back to Windows' local voice. |
+| `ELEVENLABS_MODEL_ID` | ElevenLabs speech model (default: `eleven_multilingual_v2`). |
+| `ELEVENLABS_OUTPUT_FORMAT` | PCM output format (default: `pcm_24000`). |
 | `WHISPER_MODEL` | Local transcription model (default: `base`; larger models may be more accurate but slower). |
 | `LEVI_VOICE_THRESHOLD` | Microphone speech-detection floor (default: `0.006`; increase to ignore room noise, decrease if speech is missed). |
 | Preset greeting | Edit `JARVIS_WELCOME_ENABLED` or `JARVIS_WELCOME_PHRASE` near the top of `jarvis.py`. |
@@ -53,5 +59,6 @@ The microphone stays on the PC and Whisper transcribes audio locally; raw audio 
 - **No response to speech:** Check the selected Windows microphone and its privacy permission. Adjust `LEVI_VOICE_THRESHOLD` in `.env`.
 - **Whisper model download fails:** Check internet access on first run; the selected model is cached for later local use.
 - **Provider errors:** Check the provider's API key, model name, account access, and billing. For Ollama, start its service and pull the configured model.
-- **No spoken replies:** Levi uses the operating system's installed speech voice; check Windows sound output and speech settings.
+- **No spoken replies:** Check Windows sound output and speech settings. If ElevenLabs fails, Levi should log the problem and try the local system voice.
+- **ElevenLabs voice not used:** Confirm `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` are both set in `.env`, use a PCM output format, and check the terminal for an ElevenLabs API error. Levi logs when it falls back to the local voice.
 - **Stop:** Press **Ctrl+C** or say **“stop listening.”**

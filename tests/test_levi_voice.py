@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -34,6 +34,20 @@ class VoiceCommandTests(unittest.TestCase):
 
     def test_regular_question_is_not_a_brain_command(self):
         self.assertIsNone(levi_voice._brain_command("Can you compare these models?"))
+
+    def test_speech_mode_commands(self):
+        examples = {
+            "switch to hybrid mode": "hybrid",
+            "switch to hybrid voice and text": "hybrid",
+            "switch to text and voice": "hybrid",
+            "switch to voice mode": "voice",
+            "switch to voice only": "voice",
+        }
+        for text, expected in examples.items():
+            with self.subTest(text=text):
+                command = levi_voice._response_mode_command(text)
+                self.assertIsNotNone(command)
+                self.assertEqual(command[0], expected)
 
     def test_request_type_selects_a_task_route(self):
         self.assertEqual(
@@ -195,6 +209,44 @@ class VoiceCommandTests(unittest.TestCase):
             post.call_args.args[0], "http://127.0.0.1:11434/api/chat"
         )
         self.assertEqual(post.call_args.args[1]["model"], "llama3.2")
+
+    def test_elevenlabs_reply_uses_configured_voice_and_plays_pcm(self):
+        env = {
+            "ELEVENLABS_API_KEY": "test-key",
+            "ELEVENLABS_VOICE_ID": "test-voice",
+            "ELEVENLABS_OUTPUT_FORMAT": "pcm_24000",
+        }
+        with patch.dict(os.environ, env, clear=True), patch(
+            "elevenlabs.client.ElevenLabs"
+        ) as client_factory, patch.object(levi_voice.sd, "play") as play, patch.object(
+            levi_voice.sd, "wait"
+        ) as wait:
+            client_factory.return_value.text_to_speech.convert.return_value = [
+                b"\x00\x00\x01\x00"
+            ]
+            speaker = object.__new__(levi_voice.LeviSpeaker)
+            self.assertTrue(speaker._speak_elevenlabs("Hello, Owner."))
+
+        client_factory.return_value.text_to_speech.convert.assert_called_once_with(
+            voice_id="test-voice",
+            text="Hello, Owner.",
+            model_id="eleven_multilingual_v2",
+            output_format="pcm_24000",
+        )
+        self.assertEqual(play.call_args.args[1], 24000)
+        wait.assert_called_once()
+
+    def test_voice_and_hybrid_modes_control_terminal_reply_text(self):
+        speaker = object.__new__(levi_voice.LeviSpeaker)
+        speaker._local_voice = Mock()
+        with patch.object(speaker, "_speak_elevenlabs", return_value=True), patch(
+            "builtins.print"
+        ) as printed:
+            speaker.speak("spoken only", show_text=False)
+            printed.assert_not_called()
+
+            speaker.speak("spoken and visible", show_text=True)
+            printed.assert_called_once_with("Levi: spoken and visible", flush=True)
 
 
 if __name__ == "__main__":

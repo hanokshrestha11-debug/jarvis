@@ -940,11 +940,19 @@ def _legacy_clap_main() -> int:
 
 def main() -> int:
     if sys.version_info >= (3, 15):
-        log.error(
-            "Local Whisper is not currently installable with this Python version. "
-            "Install Python 3.14, then run `py -3.14 -m pip install -r requirements.txt` "
-            "and `py -3.14 jarvis.py`."
-        )
+        launcher = shutil.which("py")
+        if launcher:
+            command = [launcher, "-3.14", *sys.argv]
+            log.info(
+                "Python %s is unsupported for local Whisper; retrying with Python 3.14.",
+                sys.version.split()[0],
+            )
+            try:
+                return subprocess.run(command, check=False).returncode
+            except OSError as exc:
+                log.error("Could not start Python 3.14 using the py launcher: %s", exc)
+                return 1
+        log.error("Local Whisper requires Python 3.14; run `py -3.14 jarvis.py`.")
         return 1
     from levi_voice import run_voice_assistant
 
