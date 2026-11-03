@@ -1,71 +1,57 @@
 # Levi — Personal AI Assistant
 
-Levi is a personal desktop assistant created for its owner, **Hanuk Shrestha**. It listens to the default microphone for a double clap, then runs the configured desktop actions and speaks a welcome message. The preset greeting is: “Owner Hanuk Shrestha, your personal AI assistant Levi is ready and up for any help.”
+Levi is a voice assistant created for its owner, **Hanuk Shrestha**. It continuously listens through the selected microphone, transcribes speech locally, answers with a chosen AI provider, and speaks replies using the computer's local voice.
 
 ## Setup
 
-From this project directory:
+Levi's local Whisper dependency currently requires **Python 3.14**. Install Python 3.14, then use the Windows Python launcher (`py`) to create the environment and run Levi:
 
-```bash
-python -m pip install -r requirements.txt
+```powershell
+py -3.14 -m pip install -r requirements.txt
+py -3.14 jarvis.py
 ```
 
-## Environment variables
+In VS Code, use **Python: Select Interpreter** and choose Python 3.14 for this workspace.
 
-The script loads a **`.env` file** in the same folder as `jarvis.py` (via `python-dotenv`). You can also set variables in the shell.
+If you do not already have a `.env`, copy `.env.example` to `.env`; otherwise, add the settings you need to your existing file so you do not overwrite its keys. Keep `.env` private; never commit API keys. Optionally install [Ollama](https://ollama.com), start it, and download a model, for example `ollama pull llama3.2`.
 
-### Required (ElevenLabs welcome line)
+The first run downloads the configured local Whisper speech-recognition model. Later transcriptions run locally. Levi needs internet access to call a selected cloud AI; Ollama requests stay on your machine.
+
+## Voice commands
+
+- Ask questions naturally; speech is transcribed locally and sent to the selected brain.
+- Say **“switch to Claude,” “switch to Gemini,” “switch to ChatGPT,”** or **“switch to Ollama”** to use that provider for this session.
+- Say **“use the best model”** or **“switch to best model”** to return to automatic task-based routing.
+- Say **“stop listening”** or press **Ctrl+C** to exit.
+
+Automatic routing uses a simple task category (coding, reasoning, or general question), then tries configured providers in order until one answers. This is a practical fallback policy, not a live benchmark or guarantee that one vendor is objectively best. Provider choice and conversation history last only for the current run.
+
+## Configuration
+
+Set keys and optional model overrides in `.env`:
 
 | Variable | Purpose |
-| -------- | ------- |
-| `ELEVENLABS_API_KEY` | API key from [ElevenLabs](https://elevenlabs.io). |
-| `ELEVENLABS_VOICE_ID` | Voice ID from the ElevenLabs app (My Voices / library). |
+| --- | --- |
+| `OPENAI_API_KEY` | OpenAI / ChatGPT API key. |
+| `OPENAI_MODEL` | OpenAI model (default: `gpt-6-astra`). |
+| `ANTHROPIC_API_KEY` | Anthropic / Claude API key. |
+| `ANTHROPIC_MODEL` | Anthropic model (default: `claude-sonnet-5-5`). |
+| `GEMINI_API_KEY` | Google AI API key. |
+| `GEMINI_MODEL` | Gemini model (default: `gemini-3.8-flash`). |
+| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://127.0.0.1:11434`). |
+| `OLLAMA_MODEL` | Installed Ollama model (default: `llama3.2`). |
+| `WHISPER_MODEL` | Local transcription model (default: `base`; larger models may be more accurate but slower). |
+| `LEVI_VOICE_THRESHOLD` | Microphone speech-detection floor (default: `0.006`; increase to ignore room noise, decrease if speech is missed). |
+| Preset greeting | Edit `JARVIS_WELCOME_ENABLED` or `JARVIS_WELCOME_PHRASE` near the top of `jarvis.py`. |
 
-Without these, the welcome speech is skipped (other actions may still run).
+You only need keys for the cloud providers you use. API access and usage charges are separate from consumer ChatGPT, Claude, or Gemini subscriptions. When automatic routing reaches an unconfigured cloud provider, it skips it. If all cloud services fail, Levi tries local Ollama. A provider explicitly selected by voice does not silently switch to another provider.
 
-### Optional
-
-| Variable | Purpose |
-| -------- | ------- |
-| `ELEVENLABS_MODEL_ID` | TTS model (default in code: `eleven_multilingual_v2`). |
-| `ELEVENLABS_OUTPUT_FORMAT` | e.g. `pcm_24000` (must match playback expectations). |
-| `ELEVENLABS_PCM_SAMPLE_RATE` | Override PCM sample rate if it differs from the format name. |
-| `JARVIS_WELCOME_CACHE_DIR` | Custom folder for cached welcome WAV (default: `.cache/jarvis_welcome/` under the project). |
-| Preset greeting | Edit `JARVIS_WELCOME_PHRASE` near the top of `jarvis.py` to change the spoken greeting. |
-| `JARVIS_INPUT_DEVICE` | Optional mic override: **integer** index or **substring** of the device name. If unset, the script uses the Windows default; when that mic is silent, it auto-picks the loudest working input. List devices: `python -c "import sounddevice as sd; print(sd.query_devices())"`. |
-| `CLAUDE_CODE_URL` | URL opened for Claude in the system default browser (set Microsoft Edge as the Windows default; default URL: new chat). |
-
-Example `.env`:
-
-```env
-ELEVENLABS_API_KEY=your_key_here
-ELEVENLABS_VOICE_ID=your_voice_id_here
-```
-
-## Run
-
-```bash
-python jarvis.py
-```
-
-Allow the microphone if Windows prompts you. Stop with **Ctrl+C**.
-
-## Tuning
-
-Edit the constants at the top of `jarvis.py`:
-
-| Constant      | Effect                                                            |
-| ------------- | ----------------------------------------------------------------- |
-| `SPIKE_RATIO` | Increase if you get false triggers; decrease if claps are missed. |
-| `COOLDOWN_S`  | Minimum time between two logged claps.                            |
-| `BLOCK_MS`    | Larger = slightly less CPU, a bit less precise timing.            |
-| `MIN_RMS`     | Floor on how loud a block must be (helps in very quiet rooms).  |
-| `SAMPLE_RATE` | Try `48000` if your device does not like `44100`.                 |
+The microphone stays on the PC and Whisper transcribes audio locally; raw audio is not sent to cloud AI providers. Transcripts and conversation context are sent to whichever cloud provider answers. To keep prompts local, say **“switch to Ollama”**; Ollama must be running with the configured model installed.
 
 ## Troubleshooting
 
-- **Wrong or quiet mic:** On startup the script probes your default Windows input. If it is silent, it **auto-selects** the loudest working mic. To force a specific device, set `JARVIS_INPUT_DEVICE` in `.env` (index or name substring from `sounddevice.query_devices()`).
-- **PortAudio / audio errors:** Update audio drivers or try another `SAMPLE_RATE`.
-- **No reaction to claps:** Lower `SPIKE_RATIO` slightly or speak/clap closer to the mic.
-- **Spam logs:** Raise `SPIKE_RATIO` or `COOLDOWN_S`.
-- **No welcome speech:** Set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `.env` and restart the terminal so variables load.
+- **No response to speech:** Check the selected Windows microphone and its privacy permission. Adjust `LEVI_VOICE_THRESHOLD` in `.env`.
+- **Whisper model download fails:** Check internet access on first run; the selected model is cached for later local use.
+- **Provider errors:** Check the provider's API key, model name, account access, and billing. For Ollama, start its service and pull the configured model.
+- **No spoken replies:** Levi uses the operating system's installed speech voice; check Windows sound output and speech settings.
+- **Stop:** Press **Ctrl+C** or say **“stop listening.”**

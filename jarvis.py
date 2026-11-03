@@ -1,34 +1,13 @@
 #!/usr/bin/env python3
 """
-Levi is Hanuk Shrestha's personal desktop assistant. It listens for a double clap
-to run the configured welcome actions.
+Levi is Hanuk Shrestha's personal voice assistant. It listens continuously, transcribes
+speech locally, and answers through a selected online AI provider or local Ollama.
 
 Run:
-  python -m pip install -r requirements.txt
-  python clap_listen.py
+    python -m pip install -r requirements.txt
+    python jarvis.py
 
-Tuning (constants below):
-  SAMPLE_RATE   — usually 44100 or 48000; match your device if needed.
-  BLOCK_MS      — analysis window size; smaller = snappier, noisier.
-  SPIKE_RATIO   — how many times louder than the noise floor counts as a clap;
-                    raise if false triggers; lower if claps are missed.
-  COOLDOWN_S    — minimum seconds between double-clap logs (debounce).
-  MIN_DOUBLE_GAP_S / MAX_DOUBLE_GAP_S — allowed time between the two claps.
-  RETRIGGER_RATIO — audio must fall below threshold * this before another hit counts.
-  NOISE_FLOOR_ALPHA — closer to 1 = slower baseline adaptation to room noise.
-  MIN_RMS       — ignore spikes below this absolute level (float audio ~ [-1, 1]).
-  SONG_URI      — Spotify or YouTube URL/URI to open on each double clap (empty = log only).
-  FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP — if True, launch Cursor without -n (reuse / focus existing instance).
-  OPEN_NEW_CURSOR_ON_DOUBLE_CLAP — if True, also launch Cursor with -n (extra new window; runs after focus launch if both).
-  CURSOR_OPEN_FULLSCREEN — Windows: after focus/launch, send F11 to enter Cursor/VS Code-style fullscreen (toggle off with F11).
-  OPEN_CLAUDE_CODE_IN_DEFAULT_BROWSER — Claude in the default browser (CLAUDE_CODE_URL).
-  JARVIS_WELCOME_* — TTS after the song (ElevenLabs). Configure via environment or a `.env`
-    file next to this script (ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, etc.).
-    With JARVIS_WELCOME_CACHE_ENABLED, audio is saved under `.cache/jarvis_welcome/` (WAV) and
-    replayed when phrase + voice + model + format match—no repeat API call. Delete that folder
-    or set JARVIS_WELCOME_CACHE_ENABLED=False to force a fresh fetch.
-  The welcome sequence runs only once per process. The assistant speaks in the background so Cursor
-    opens without waiting for playback to finish (restart the script to run again).
+Provider keys, model choices, and voice detection settings are documented in README.md.
 """
 
 from __future__ import annotations
@@ -837,7 +816,7 @@ def open_cursor_window() -> None:
             log.warning("Cursor fullscreen: no Cursor window found to send F11.")
 
 
-def main() -> int:
+def _legacy_clap_main() -> int:
     blocksize = block_samples()
     noise_floor = 1e-4
     last_logged_double = 0.0
@@ -957,6 +936,24 @@ def main() -> int:
         return 1
 
     return 0
+
+
+def main() -> int:
+    if sys.version_info >= (3, 15):
+        log.error(
+            "Local Whisper is not currently installable with this Python version. "
+            "Install Python 3.14, then run `py -3.14 -m pip install -r requirements.txt` "
+            "and `py -3.14 jarvis.py`."
+        )
+        return 1
+    from levi_voice import run_voice_assistant
+
+    input_idx = _choose_input_device(block_samples())
+    return run_voice_assistant(
+        input_device=input_idx,
+        welcome_enabled=JARVIS_WELCOME_ENABLED,
+        welcome_phrase=JARVIS_WELCOME_PHRASE,
+    )
 
 
 if __name__ == "__main__":
